@@ -15,11 +15,10 @@ import {
   Eye,
   Loader
 } from 'lucide-react';
-import { useParams } from 'react-router-dom';
 
 const ProductImageManager = () => {
   const [images, setImages] = useState([]);
-  const { productId } = useParams();
+  const [productId] = useState('sample-product-id'); // Replace with actual productId from useParams
   const [draggedItem, setDraggedItem] = useState(null);
   const [dragOverItem, setDragOverItem] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -30,7 +29,8 @@ const ProductImageManager = () => {
   const dropZoneRef = useRef(null);
   const [productData, setProductData] = useState({});
   const [uploadProgress, setUploadProgress] = useState({});
-    const apiBaseUrl = 'https://api.toteja.co';
+  const apiBaseUrl = 'https://api.toteja.co';
+
   // โหลดข้อมูลสินค้าและรูปภาพ
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -42,25 +42,20 @@ const ProductImageManager = () => {
     try {
       const response = await fetch(`${apiBaseUrl}/api/images/getProductdata/${productId}`);
       const data = await response.json();
-       await setProductData(data);
-       console.log(productData)
-      console.log(productData.category);
-      console.log(productData.subcategory)
-   
+      setProductData(data);
+      console.log('Product data loaded:', data);
     } catch (err) {
       console.error('Error fetching product data:', err);
       showNotification('ไม่สามารถโหลดข้อมูลสินค้าได้', 'error');
     }
   };
-     console.log(productData)
-      console.log(productData.category);
-      console.log(productData.subcategory)
+
   const loadImages = async () => {
     try {
       const response = await fetch(`${apiBaseUrl}/api/images/${productId}/images`);
       const data = await response.json();
       if (data.success) {
-        setImages(data.images);
+        setImages(data.images || []);
       }
     } catch (err) {
       console.error('Error fetching images:', err);
@@ -73,31 +68,64 @@ const ProductImageManager = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // อัปโหลดรูปภาพไปยัง API
-  const uploadImageToAPI = async (file, displayOrder = null) => {
-    const formData = new FormData();
-    formData.append('image', file);
-    if (displayOrder) {
-      formData.append('displayOrder', displayOrder);
-    }
-
+  // อัปโหลดรูปภาพใหม่ - ใช้ Frontend Upload
+  const uploadImageToS3 = async (file) => {
     try {
-          console.log(productData.category);
-          console.log(productData.subcategory);
-      const response = await fetch(
-        `${apiBaseUrl}/api/images/upload/${productData.category}/${productData.subcategory}/${productId}`,
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
+      // Step 1: ขอ Presigned URL สำหรับอัปโหลดจาก Backend
+      const getUrlResponse = await fetch(`${apiBaseUrl}/api/images/getupload-imageData`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          filetype: file.type,
+          productId: productId
+        })
+      });
 
-      const result = await response.json();
-      if (result.success) {
-        return result;
-      } else {
-        throw new Error(result.error || 'Upload failed');
+      if (!getUrlResponse.ok) {
+        throw new Error('ไม่สามารถขอ Presigned URL ได้');
       }
+
+      const uploadData = await getUrlResponse.json();
+      const { uploadUrl, publicUrl } = uploadData;
+
+      // Step 2: อัปโหลดรูปไป S3 โดยตรง
+      const uploadToS3Response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type
+        },
+        body: file
+      });
+
+      if (!uploadToS3Response.ok) {
+        throw new Error('อัปโหลดรูปไป S3 ไม่สำเร็จ');
+      }
+
+      // Step 3: ส่งข้อมูลไป backend เพื่อบันทึก path ลงฐานข้อมูล
+      const saveImageResponse = await fetch(`${apiBaseUrl}/api/images/save-image-path`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          productId: productId,
+          imagePath: publicUrl,
+          filename: file.name,
+          filesize: file.size,
+          displayOrder: images.length + 1
+        })
+      });
+
+      if (!saveImageResponse.ok) {
+        throw new Error('บันทึก path รูปไม่สำเร็จ');
+      }
+
+      const savedImageData = await saveImageResponse.json();
+      return savedImageData;
+
     } catch (error) {
       console.error('Upload error:', error);
       throw error;
@@ -113,7 +141,7 @@ const ProductImageManager = () => {
   // จัดการการอัปโหลดไฟล์
   const handleFilesUpload = async (files) => {
     if (files.length === 0) return;
-
+   
     setIsUploading(true);
     const uploadedImages = [];
 
@@ -139,15 +167,15 @@ const ProductImageManager = () => {
         setImages(prev => [...prev, tempImage]);
         
         try {
-          // อัปโหลดไฟล์
-          const result = await uploadImageToAPI(file);
+          // อัปโหลดไฟล์ผ่าน Frontend
+          const result = await uploadImageToS3(file);
           
-          // อัปเดตรูปภาพหลังจากอัปโหลดสำเร็จ
+          // อัปโหลดสำเร็จ - อัปเดตข้อมูลรูปภาพ
           const uploadedImage = {
-            id: result.imageId,
-            image_path: result.imagePath,
-            display_order: result.displayOrder,
-            isMain: false,
+            id: result.imageId || result.id,
+            image_path: result.imagePath || result.image_path,
+            display_order: result.displayOrder || result.display_order,
+            isMain: result.isMain || false,
             isUploading: false
           };
           
@@ -184,6 +212,8 @@ const ProductImageManager = () => {
       
       if (uploadedImages.length > 0) {
         showNotification(`อัปโหลดรูปภาพสำเร็จ ${uploadedImages.length} รูป`, 'success');
+        // โหลดข้อมูลใหม่เพื่อซิงค์กับ Backend
+        await loadImages();
       }
       
     } catch (error) {
@@ -200,7 +230,6 @@ const ProductImageManager = () => {
       e.preventDefault();
       return;
     }
-    console.log("item")
     setDraggedItem(item);
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -272,65 +301,41 @@ const ProductImageManager = () => {
   };
 
   const handleSetMain = async (imageId) => {
-     const currentMainImage = images.find(img => img.isMain);
-     console.log("Oldmain"+currentMainImage);
-     const updatedImages = images.map(img => ({
+    const currentMainImage = images.find(img => img.isMain);
+    console.log("Old main:", currentMainImage);
+    
+    // Optimistic update
+    const updatedImages = images.map(img => ({
       ...img,
       isMain: img.id === imageId
     }));
     setImages(updatedImages); 
-    showNotification('กำลังเปลี่ยนรูปภาพหลัก...'); // Inform the user
+    showNotification('กำลังเปลี่ยนรูปภาพหลัก...');
+    
     try {
-        // Step 1: If there was a previous main image AND it's different from the new one,
-        // send an API request to unset its 'is_main_image' status in the database.
-        if (currentMainImage && currentMainImage.id !== imageId) {
-            console.log(`Unsetting old main image: ${currentMainImage.id}`);
-            const response = await fetch(
-                `${apiBaseUrl}/api/images/${productId}/set-main`,
-                {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ imageId: currentMainImage.id, isMain: false }),
-                }
-            );
+      // ใช้ Backend API สำหรับเปลี่ยนรูปหลัก
+      const response = await fetch(`${apiBaseUrl}/api/images/${productId}/set-main`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageId: imageId, isMain: true }),
+      });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to unset previous main image.');
-            }
-        }
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to set main image.');
+      }
 
-        // Step 2: Send an API request to set the newly selected image as 'is_main_image = true'
-        // This also handles updating the `image_Main_path` in the `Products` table on the backend.
-        console.log(`Setting new main image: ${imageId}`);
-        const response = await fetch(
-            `${apiBaseUrl}/api/images/${productId}/set-main`,
-            {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageId: imageId, isMain: true }),
-            }
-        );
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to set new main image.');
-        }
-
-        // If both API calls succeed, show a success notification.
-        // It's good practice to re-load images to ensure perfect sync with the database,
-        // especially if backend logic handles more complex scenarios.
-        await loadImages(); // Call loadImages to fetch the latest state from the server
-        showNotification('รูปภาพหลักถูกเปลี่ยนสำเร็จแล้ว!', 'success');
+      // โหลดข้อมูลใหม่เพื่อซิงค์กับ Backend
+      await loadImages();
+      showNotification('รูปภาพหลักถูกเปลี่ยนสำเร็จแล้ว!', 'success');
     } catch (error) {
-        console.error('Error setting main image:', error);
-        showNotification(`ไม่สามารถเปลี่ยนรูปภาพหลักได้: ${error.message}`, 'error');
-
-        // If an error occurs, revert the UI to its state before the optimistic update
-        // This makes the UI consistent with the backend if the operation failed.
-        await loadImages(); // Re-fetch the correct state from the server
+      console.error('Error setting main image:', error);
+      showNotification(`ไม่สามารถเปลี่ยนรูปภาพหลักได้: ${error.message}`, 'error');
+      // Revert on error
+      await loadImages();
     }
-};
+  };
+
   // ลบรูปภาพ
   const handleDelete = async (imageId) => {
     try {
@@ -342,7 +347,7 @@ const ProductImageManager = () => {
         return;
       }
 
-      // ลบจาก API
+      // ใช้ Backend API สำหรับลบรูปภาพ
       const response = await fetch(
         `${apiBaseUrl}/api/images/delete/${productData.category}/${productData.subcategory}/${productId}/${imageId}`,
         { method: 'DELETE' }
@@ -350,15 +355,8 @@ const ProductImageManager = () => {
 
       const result = await response.json();
       if (result.success) {
-        // ลบจาก state และจัดเรียงใหม่
-        const remainingImages = images.filter(img => img.id !== imageId);
-        const reorderedImages = remainingImages.map((img, index) => ({
-          ...img,
-          display_order: index + 1,
-          isMain: index === 0 && remainingImages.length > 0 ? true : (index === 0 ? false : img.isMain)
-        }));
-        
-        setImages(reorderedImages);
+        // โหลดข้อมูลใหม่เพื่อซิงค์กับ Backend
+        await loadImages();
         showNotification('รูปภาพถูกลบแล้ว', 'success');
       } else {
         throw new Error(result.error);
@@ -376,13 +374,15 @@ const ProductImageManager = () => {
     try {
       // เตรียมข้อมูลลำดับรูปภาพ (ไม่รวมรูปที่กำลังอัปโหลด)
       const imageOrders = images
-        .filter(img => !img.isUploading && img.id !== 'main')
+        .filter(img => !img.isUploading)
         .map(img => ({
           imageId: img.id,
           displayOrder: img.display_order
         }));
-         console.log(imageOrders+"EGEKGOE")
-      // ส่งข้อมูลไปยัง API
+
+      console.log('Saving image orders:', imageOrders);
+
+      // ใช้ Backend API สำหรับบันทึกลำดับรูปภาพ
       const response = await fetch(`${apiBaseUrl}/api/images/reorder/${productId}`, {
         method: 'PUT',
         headers: {
@@ -394,7 +394,7 @@ const ProductImageManager = () => {
       const result = await response.json();
       if (result.success) {
         showNotification('บันทึกลำดับรูปภาพสำเร็จ!', 'success');
-        // โหลดข้อมูลใหม่เพื่อให้แน่ใจว่าข้อมูลตรงกับฐานข้อมูล
+        // โหลดข้อมูลใหม่เพื่อซิงค์กับ Backend
         await loadImages();
       } else {
         throw new Error(result.error);
@@ -431,12 +431,13 @@ const ProductImageManager = () => {
     }
   };
 
-  // สร้าง image URL
+  // สร้าง image URL - ใช้ Backend API สำหรับดูรูปภาพ
   const getImageUrl = (imagePath) => {
     if (imagePath.startsWith('blob:') || imagePath.startsWith('data:') || imagePath.startsWith('https')){
       return imagePath;
     }
-    return "https://cdn.toteja.co/"+imagePath;
+    // ใช้ Backend API สำหรับดูรูปภาพ
+    return `${apiBaseUrl}/api/images/view/${encodeURIComponent(imagePath)}`;
   };
 
   return (
@@ -552,7 +553,7 @@ const ProductImageManager = () => {
 
                 {/* Order Number */}
                 <div className="absolute bottom-3 left-3 z-10 w-8 h-8 bg-gray-900/80 backdrop-blur-sm rounded-full flex items-center justify-center text-white font-bold text-sm border border-gray-600">
-                  {index}
+                  {image.display_order}
                 </div>
 
                 {/* Image */}
@@ -561,9 +562,6 @@ const ProductImageManager = () => {
                     src={getImageUrl(image.image_path)}
                     alt={`Product image ${image.display_order}`}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                    // onError={(e) => {
-                    //   e.target.src = 'https://via.placeholder.com/400x400/374151/9CA3AF?text=No+Image';
-                    // }}
                   />
                   
                   {/* Overlay */}
@@ -659,51 +657,60 @@ const ProductImageManager = () => {
               <span>ลากและวางรูปภาพเพื่ออัปโหลดและจัดเรียงลำดับ</span>
             </div>
             <div className="flex items-start gap-2">
-              <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2 flex-shrink-0"></div>
-              <span>คลิกดาวเพื่อตั้งเป็นรูปหลัก</span>
+              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+              <span>ใช้ปุ่ม **"เพิ่มรูปภาพ"** เพื่อเลือกไฟล์จากคอมพิวเตอร์ของคุณ</span>
             </div>
             <div className="flex items-start gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
-              <span>รูปภาพจะถูกอัปโหลดทันทีเมื่อเลือก</span>
+              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+              <span>คลิกที่ไอคอนลูกศรขึ้น/ลง เพื่อ **เลื่อนลำดับ** รูปภาพ</span>
             </div>
             <div className="flex items-start gap-2">
-              <div className="w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0"></div>
-              <span>กดบันทึกเพื่อเซฟลำดับรูปภาพ</span>
+              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+              <span>คลิกที่ไอคอนรูปดาวเพื่อ **ตั้งเป็นรูปหลัก**</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+              <span>คลิกที่ไอคอนรูปถังขยะเพื่อ **ลบ** รูปภาพ</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+              <span>อย่าลืมกดปุ่ม **"บันทึกลำดับ"** เพื่อบันทึกการเปลี่ยนแปลงทั้งหมด</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+              <span>คุณสามารถดูตัวอย่างรูปภาพได้โดยคลิกที่ไอคอนรูปตา</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Preview Modal */}
+      {/* Image Preview Modal */}
       {previewImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="relative max-w-4xl max-h-[90vh] m-4">
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-4xl max-h-full overflow-hidden rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => setPreviewImage(null)}
-              className="absolute -top-4 -right-4 p-2 bg-gray-900 hover:bg-gray-800 rounded-full transition-colors z-10"
+              className="absolute top-3 right-3 p-2 bg-gray-800/70 hover:bg-gray-700/80 rounded-full text-white z-10 transition-colors"
             >
-              <X size={20} />
+              <X size={24} />
             </button>
-            <img
-              src={getImageUrl(previewImage.image_path)}
-              alt="Preview"
-              className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
+            <img 
+              src={getImageUrl(previewImage.image_path)} 
+              alt="Preview" 
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
             />
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-900/90 backdrop-blur-sm rounded-xl px-4 py-2 border border-gray-700">
-              <p className="text-white text-sm">รูปที่ {previewImage.display_order}</p>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Hidden File Input */}
+      {/* Hidden file input */}
       <input
-        ref={fileInputRef}
         type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
         multiple
         accept="image/*"
-        onChange={handleFileSelect}
-        className="hidden"
+        style={{ display: 'none' }}
       />
     </div>
   );

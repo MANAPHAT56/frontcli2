@@ -113,14 +113,15 @@
     }, [subcategoryId, sortBy]);
 
     // Search with debounce - ไม่ให้กระพริบหน้าเว็บ
-    useEffect(() => {
-      const timer = setTimeout(() => {
-        setNextCursor(null);
-        setHasMore(false);
-        fetchProducts(false, true); // ส่ง isSearch = true
-      }, 500);
-      return () => clearTimeout(timer);
-    }, [searchTerm]);
+useEffect(() => {
+  if (searchTerm.trim() === '') return; // ถ้ายังไม่พิมพ์ ไม่ต้องค้นหา
+  const timer = setTimeout(() => {
+    setNextCursor(null);
+    setHasMore(false);
+    fetchProducts(false, true); // isSearch
+  }, 500);
+  return () => clearTimeout(timer);
+}, [searchTerm]);
 
     const ProductCard = ({ product }) => {
       return (
