@@ -19,7 +19,7 @@ const ModernNavbar = () => {
 
   const useNavigationItems = () => {
   const [categories, setCategories] = useState([]);
-       const apiBaseUrl = 'http://localhost:5000';
+       const apiBaseUrl = 'https://api.toteja.co';
   useEffect(() => {
     fetch(`${apiBaseUrl}/api/store/CategoryNav`) // URL นี้ให้เปลี่ยนตาม API ของคุณ
       .then((res) => res.json())

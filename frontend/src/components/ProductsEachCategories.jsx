@@ -10,7 +10,7 @@ const ProductShowcase = () => {
   const [animatedCards, setAnimatedCards] = useState(new Set());
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true); // Add loading state
-  const apiBaseUrl = "http://localhost:5000"
+  const apiBaseUrl = "https://api.toteja.co"
   useEffect(()  => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setLoading(true); // Set loading to true when fetching starts

@@ -37,7 +37,7 @@ const SubcategoryProductDetail = () => {
   const [zoomImage, setZoomImage] = useState('');
 
   const navigate = useNavigate();
- const apiBaseUrl ="http://localhost:5000"
+ const apiBaseUrl ="https://api.toteja.co"
   const handleViewDetails = (productId) => {
     console.log(productId);
     navigate(`/detailProducts/${productId}`);

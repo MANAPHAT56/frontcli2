@@ -24,7 +24,7 @@
     const [error, setError] = useState(null);
     const {subcategoryId} = useParams(); // Mock subcategory ID
     const productsPerPage = 12;
-    const apiBaseUrl = 'http://localhost:5000';
+    const apiBaseUrl = 'https://api.toteja.co';
    useEffect(() => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }, []);
@@ -48,7 +48,7 @@
       
       try {
         // Mock API response for demo
-        await new Promise(resolve => setTimeout(resolve, isSearch ? 800 : 1500)); // Simulate API delay
+     
         const params = new URLSearchParams({
           limit: productsPerPage.toString(),
           sort: sortBy,
@@ -68,7 +68,7 @@
           setProducts(data.products);
         }
         
-        setHasMore(Math.random() > 0.5); // Random has more
+        setHasMore(data.loadMore.hasMore)
         setNextCursor({ lastId: data[data.length - 1]?.id });
         
       } catch (err) {

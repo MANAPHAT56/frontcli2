@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MessageCircle, Phone, Mail, Search, ChevronRight, Loader, ShoppingCart } from 'lucide-react'; // Import ShoppingCart
 import { useNavigate } from 'react-router-dom';
 import  Contact from './footer'
- const apiBaseUrl  = "http://localhost:5000";
+ const apiBaseUrl  = "https://api.toteja.co";
 // --- Skeleton Components ---
 
 // Skeleton for a Product Card

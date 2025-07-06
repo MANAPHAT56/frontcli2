@@ -19,7 +19,7 @@ const ProductShowcase = () => {
   navigate(`/detailProducts/${productId}`);
   };
 
- const apiBaseUrl = "http://localhost:5000"
+ const apiBaseUrl = "https://api.toteja.co"
 
   useEffect( () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });

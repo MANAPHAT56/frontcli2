@@ -30,7 +30,7 @@ const ProductImageManager = () => {
   const dropZoneRef = useRef(null);
   const [productData, setProductData] = useState({});
   const [uploadProgress, setUploadProgress] = useState({});
-    const apiBaseUrl = 'http://localhost:5000';
+    const apiBaseUrl = 'https://api.toteja.co';
   // โหลดข้อมูลสินค้าและรูปภาพ
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });

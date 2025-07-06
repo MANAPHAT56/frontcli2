@@ -41,7 +41,7 @@ const WorksPortfolio = () => {
   const [totalCount, setTotalCount] = useState(0);
   const navigate= useNavigate();
 
-  const API_BASE_URL = 'http://localhost:5000/api';
+  const API_BASE_URL = 'https://api.toteja.co/api';
   console.log("rerender")
   // Sort options
   const sortOptions = [

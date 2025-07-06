@@ -31,7 +31,7 @@ const WorksImageManager = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const fileInputRef = useRef(null);
   const dropZoneRef = useRef(null);
-       const apiBaseUrl = 'http://localhost:5000';
+       const apiBaseUrl = 'https://api.toteja.co';
   // Mock workId, category, subcategory - ในการใช้งานจริงจะได้จาก URL params
   const {workId,categoryId,subcategoryId} = useParams();
 
